@@ -16,4 +16,8 @@ Usage: img2pdf [options] image1 [image2] ...
 Options:
   -output string
     	Specify the output file name (default "output.pdf")
+  -size string
+    	Specify the page size (default "A4")
 ```
+
+The image filename can be specified as a glob pattern.
