@@ -37,88 +37,99 @@ func main() {
 		flag.Usage()
 		os.Exit(1)
 	}
+
 	pdf := gopdf.GoPdf{}
 	pageSize := getPageSize(size)
 	pdf.Start(gopdf.Config{PageSize: *pageSize})
-	var err error
-	for _, arg := range args {
-		files := []string{arg}
-		if strings.Contains(arg, "*") {
-			files, err = filepath.Glob(arg)
-			if err != nil {
-				fmt.Println("Error with file mask (", arg, "): ", err)
-				continue
-			}
-		}
-		for i := 0; i < len(files); i++ {
-			fmt.Println("adding", files[i], "...")
-			w, h, err := getImageDimensions(files[i])
-			if err != nil {
-				fmt.Println("Error opening file (", files[i], "): ", err)
-				continue
-			}
-			rect := gopdf.Rect{W: float64(w), H: float64(h)}
-			if rect.W > pageSize.W {
-				rect.H = rect.H * pageSize.W / rect.W
-				rect.W = pageSize.W
-			}
-			if rect.H > pageSize.H {
-				rect.W = rect.W * pageSize.H / rect.H
-				rect.H = pageSize.H
-			}
-			pdf.AddPage()
-			pdf.Image(files[i], 0, 0, &rect)
-		}
-	}
+
+	processImages(&pdf, args, pageSize)
+
 	if pdf.GetNumberOfPages() == 0 {
 		fmt.Println("No images found")
 		os.Exit(1)
 	}
+
 	fmt.Println("saving to", output)
-	pdf.WritePdf(output)
+	if err := pdf.WritePdf(output); err != nil {
+		fmt.Printf("Error writing PDF: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func processImages(pdf *gopdf.GoPdf, args []string, pageSize *gopdf.Rect) {
+	for _, arg := range args {
+		files, err := getFiles(arg)
+		if err != nil {
+			fmt.Printf("Error with file mask (%s): %v\n", arg, err)
+			continue
+		}
+
+		for _, file := range files {
+			fmt.Printf("adding %s...\n", file)
+			if err := addImageToPDF(pdf, file, pageSize); err != nil {
+				fmt.Printf("Error processing file (%s): %v\n", file, err)
+			}
+		}
+	}
+}
+
+func getFiles(arg string) ([]string, error) {
+	if strings.Contains(arg, "*") {
+		return filepath.Glob(arg)
+	}
+	return []string{arg}, nil
+}
+
+func addImageToPDF(pdf *gopdf.GoPdf, file string, pageSize *gopdf.Rect) error {
+	w, h, err := getImageDimensions(file)
+	if err != nil {
+		return err
+	}
+
+	rect := fitImageToPage(float64(w), float64(h), pageSize)
+
+	pdf.AddPage()
+	return pdf.Image(file, 0, 0, &rect)
+}
+
+func fitImageToPage(w, h float64, pageSize *gopdf.Rect) gopdf.Rect {
+	rect := gopdf.Rect{W: w, H: h}
+	if rect.W > pageSize.W {
+		rect.H = rect.H * pageSize.W / rect.W
+		rect.W = pageSize.W
+	}
+	if rect.H > pageSize.H {
+		rect.W = rect.W * pageSize.H / rect.H
+		rect.H = pageSize.H
+	}
+	return rect
 }
 
 func getPageSize(s string) *gopdf.Rect {
-	// Detect page size
-	switch strings.ToLower(s) {
-	case "a0":
-		return gopdf.PageSizeA0
-	case "a1":
-		return gopdf.PageSizeA1
-	case "a2":
-		return gopdf.PageSizeA2
-	case "a3":
-		return gopdf.PageSizeA3
-	case "a4":
-		return gopdf.PageSizeA4
-	case "a4l":
-		return gopdf.PageSizeA4Landscape
-	case "a4s":
-		return gopdf.PageSizeA4Small
-	case "a5":
-		return gopdf.PageSizeA5
-	case "b4":
-		return gopdf.PageSizeB4
-	case "b5":
-		return gopdf.PageSizeB5
-	case "executive":
-		return gopdf.PageSizeExecutive
-	case "folio":
-		return gopdf.PageSizeFolio
-	case "legal":
-		return gopdf.PageSizeLegal
-	case "ledger":
-		return gopdf.PageSizeLedger
-	case "letter":
-		return gopdf.PageSizeLetter
-	case "quarto":
-		return gopdf.PageSizeQuarto
-	case "statement":
-		return gopdf.PageSizeStatement
-	case "tabloid":
-		return gopdf.PageSizeTabloid
-	case "10x14":
-		return gopdf.PageSize10x14
+	sizes := map[string]*gopdf.Rect{
+		"a0":        gopdf.PageSizeA0,
+		"a1":        gopdf.PageSizeA1,
+		"a2":        gopdf.PageSizeA2,
+		"a3":        gopdf.PageSizeA3,
+		"a4":        gopdf.PageSizeA4,
+		"a4l":       gopdf.PageSizeA4Landscape,
+		"a4s":       gopdf.PageSizeA4Small,
+		"a5":        gopdf.PageSizeA5,
+		"b4":        gopdf.PageSizeB4,
+		"b5":        gopdf.PageSizeB5,
+		"executive": gopdf.PageSizeExecutive,
+		"folio":     gopdf.PageSizeFolio,
+		"legal":     gopdf.PageSizeLegal,
+		"ledger":    gopdf.PageSizeLedger,
+		"letter":    gopdf.PageSizeLetter,
+		"quarto":    gopdf.PageSizeQuarto,
+		"statement": gopdf.PageSizeStatement,
+		"tabloid":   gopdf.PageSizeTabloid,
+		"10x14":     gopdf.PageSize10x14,
+	}
+
+	if size, ok := sizes[strings.ToLower(s)]; ok {
+		return size
 	}
 	return gopdf.PageSizeA4
 }
@@ -134,6 +145,5 @@ func getImageDimensions(filePath string) (int, int, error) {
 	if err != nil {
 		return 0, 0, err
 	}
-
 	return img.Width, img.Height, nil
 }
