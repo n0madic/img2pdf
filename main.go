@@ -1,17 +1,22 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"image"
+	"image/draw"
 	_ "image/gif"
 	_ "image/jpeg"
+	"image/png"
 	_ "image/png"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/signintech/gopdf"
+	_ "golang.org/x/image/tiff"
+	_ "golang.org/x/image/webp"
 )
 
 var (
@@ -42,10 +47,10 @@ func main() {
 	pageSize := getPageSize(size)
 	pdf.Start(gopdf.Config{PageSize: *pageSize})
 
-	processImages(&pdf, args, pageSize)
+	imagesAdded := processImages(&pdf, args, pageSize)
 
-	if pdf.GetNumberOfPages() == 0 {
-		fmt.Println("No images found")
+	if imagesAdded == 0 {
+		fmt.Println("No images were successfully processed")
 		os.Exit(1)
 	}
 
@@ -56,7 +61,8 @@ func main() {
 	}
 }
 
-func processImages(pdf *gopdf.GoPdf, args []string, pageSize *gopdf.Rect) {
+func processImages(pdf *gopdf.GoPdf, args []string, pageSize *gopdf.Rect) int {
+	count := 0
 	for _, arg := range args {
 		files, err := getFiles(arg)
 		if err != nil {
@@ -68,9 +74,12 @@ func processImages(pdf *gopdf.GoPdf, args []string, pageSize *gopdf.Rect) {
 			fmt.Printf("adding %s...\n", file)
 			if err := addImageToPDF(pdf, file, pageSize); err != nil {
 				fmt.Printf("Error processing file (%s): %v\n", file, err)
+			} else {
+				count++
 			}
 		}
 	}
+	return count
 }
 
 func getFiles(arg string) ([]string, error) {
@@ -86,9 +95,26 @@ func addImageToPDF(pdf *gopdf.GoPdf, file string, pageSize *gopdf.Rect) error {
 		return err
 	}
 
+	// Convert TIFF/WebP to PNG for gopdf compatibility
 	rect := fitImageToPage(float64(w), float64(h), pageSize)
-
 	pdf.AddPage()
+
+	ext := strings.ToLower(filepath.Ext(file))
+	if ext == ".tiff" || ext == ".tif" || ext == ".webp" {
+		// Convert to PNG in memory
+		pngData, err := convertToPNG(file)
+		if err != nil {
+			return fmt.Errorf("failed to convert image: %w", err)
+		}
+		// Use ImageFrom with in-memory data
+		holder, err := gopdf.ImageHolderByReader(bytes.NewReader(pngData))
+		if err != nil {
+			return fmt.Errorf("failed to create image holder: %w", err)
+		}
+		return pdf.ImageByHolder(holder, 0, 0, &rect)
+	}
+
+	// Use regular Image method for already supported formats
 	return pdf.Image(file, 0, 0, &rect)
 }
 
@@ -141,9 +167,38 @@ func getImageDimensions(filePath string) (int, int, error) {
 	}
 	defer file.Close()
 
+	// DecodeConfig is used to get image dimensions without fully decoding the image
 	img, _, err := image.DecodeConfig(file)
 	if err != nil {
 		return 0, 0, err
 	}
 	return img.Width, img.Height, nil
+}
+
+func convertToPNG(filePath string) ([]byte, error) {
+	// Open source image
+	file, err := os.Open(filePath)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+
+	// Decode image
+	img, _, err := image.Decode(file)
+	if err != nil {
+		return nil, err
+	}
+
+	// Convert to 8-bit RGBA to handle 16-bit images
+	bounds := img.Bounds()
+	rgba := image.NewRGBA(bounds)
+	draw.Draw(rgba, bounds, img, bounds.Min, draw.Src)
+
+	// Encode to PNG in memory
+	var buf bytes.Buffer
+	if err := png.Encode(&buf, rgba); err != nil {
+		return nil, err
+	}
+
+	return buf.Bytes(), nil
 }
