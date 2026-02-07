@@ -4,3 +4,5 @@ github.com/pkg/errors v0.8.1 h1:iURUrRGxPUNPdy5/HRSm+Yj6okJ6UtLINN0Q9M4+h3I=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
 github.com/signintech/gopdf v0.26.1 h1:U9Mzqnzp+tgx/mUNWUwiBzAica+St+CsJ4wTn8lrmxY=
 github.com/signintech/gopdf v0.26.1/go.mod h1:d23eO35GpEliSrF22eJ4bsM3wVeQJTjXTHq5x5qGKjA=
+github.com/signintech/gopdf v0.35.0 h1:4P/qoByDNrKXhtB8aZPwXidY8YjygP78dCi7Tqbnwu4=
+github.com/signintech/gopdf v0.35.0/go.mod h1:d23eO35GpEliSrF22eJ4bsM3wVeQJTjXTHq5x5qGKjA=
